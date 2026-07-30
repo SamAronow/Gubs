@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gubs — table</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Karla:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="table">
+
+  <header class="topbar">
+    <span class="brandmini">Gubs</span>
+    <span class="roomtag" id="roomTag">&mdash;</span>
+    <div class="lettertrack">
+      <span class="lbl">Letters drawn</span>
+      <div class="slot" id="slotG">G</div>
+      <div class="slot" id="slotU">U</div>
+      <div class="slot" id="slotB">B</div>
+    </div>
+    <button class="ghost small" id="btnQuit">Leave table</button>
+  </header>
+
+  <main class="arena">
+    <div>
+      <div class="colonies" id="colonies"></div>
+      <div class="pile" id="pile" style="margin-top:14px"></div>
+    </div>
+
+    <aside class="side">
+      <div class="sidebox">
+        <h3>Table</h3>
+        <div id="tableInfo" style="font-size:13px;color:var(--parch-dim)"></div>
+      </div>
+      <div class="sidebox">
+        <h3>What happened</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="tray">
+    <div class="trayhead">
+      <div class="prompt" id="prompt">&nbsp;<span class="sub" id="promptSub"></span></div>
+      <span class="handcount" id="handCount"></span>
+      <div class="trayactions" id="actions"></div>
+    </div>
+    <div class="hand" id="hand"></div>
+  </div>
+
+</div>
+
+<div id="modalHost"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="js/database.js"></script>
+<script src="js/cards.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
