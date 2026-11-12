@@ -68,7 +68,7 @@ export function newGame(players, rng = Math.random) {
     phase: 'playing', players: players.map(p => ({ id: p.id, name: p.name })),
     turn: 0, drew: false, played: false, skipped: {},
     deck: [], discard: [], hands: {}, table: {}, letters: [],
-    pending: null, reveal: null, result: null, log: [], seq: 1,
+    pending: null, reveal: null, result: null, lastDraw: null, log: [], seq: 1,
   };
   let deck = [];
   const letters = [];
@@ -259,6 +259,8 @@ function draw(s, pid) {
   if (!s.deck.length) fail('The deck is empty.');
   const c = s.deck.pop();
   s.drew = true;
+  // `open` draws (Events and Letters) are shown to everyone; others only to the drawer.
+  s.lastDraw = { n: (s.lastDraw ? s.lastDraw.n : 0) + 1, by: pid, card: c, open: isEvent(c) };
   if (!isEvent(c)) { s.hands[pid].push(c); log(s, `${pname(s, pid)} draws a card.`); return; }
   log(s, `${pname(s, pid)} draws ${kindOf(c) === 'letter' ? 'the ' : 'an Event: '}${nameOf(c)}!`);
   s.pending = {

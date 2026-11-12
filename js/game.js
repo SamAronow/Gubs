@@ -8,6 +8,7 @@ const me = myId();
 let db, data = undefined, S = null;
 // Local-only interaction state (never synced).
 let ui = { sel: null, discard: null, order: [] };
+let seenDraw = null;      // last draw number already flashed on this screen
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const nameFor = pid => pid === me ? 'You' : esc((S.players.find(p => p.id === pid) || {}).name || '?');
@@ -29,6 +30,7 @@ async function start() {
     S = v && v.game ? JSON.parse(v.game.json) : null;
     pruneUi();
     render();
+    flashDraw();
   }, e => { app.innerHTML = `<p class="loading">${esc(explain(e))}</p>`; });
 }
 
@@ -66,6 +68,20 @@ async function startGame() {
   const s = newGame(seats.map(([id, v]) => ({ id, name: v.name })));
   await db.write(`rooms/${room}/game`, { v: 1, json: JSON.stringify(s) });
   await db.write(`rooms/${room}/meta/status`, 'playing');
+}
+
+// Flash the card that was just drawn in the middle of the screen, then fade it out.
+// The drawer sees their card; Events and Letters are shown to everyone; otherwise the card back.
+function flashDraw() {
+  const d = S && S.lastDraw, n = d ? d.n : 0;
+  if (seenDraw === null || !d || n <= seenDraw) { seenDraw = n; return; }   // nothing new (or first load / new game)
+  seenDraw = n;
+  const face = d.open || d.by === me;
+  const who = d.by === me ? 'You drew' : `${nameFor(d.by)} drew`;
+  const el = document.getElementById('flash');
+  el.innerHTML = `<figure><img src="${img(face ? typeOf(d.card) : 'back')}" alt=""><figcaption>${who}${face ? ' ' + esc(nameOf(d.card)) : ''}</figcaption></figure>`;
+  el.hidden = false;
+  clearTimeout(flashDraw.t); flashDraw.t = setTimeout(() => { el.hidden = true; el.innerHTML = ''; }, 1700);
 }
 
 // ---------- rendering ----------
@@ -134,34 +150,36 @@ function promptHtml() {
   const p = S.pending;
   const btn = (act, label, extra = '', cls = '') => `<button class="btn ${cls}" data-act="${act}" ${extra}>${label}</button>`;
 
-  if (S.phase === 'ended') return `<p class="say">Game over.</p>`;
+  if (S.phase === 'ended') return '';
+  // Messages about other people's business are only shown on my own turn.
+  const idle = html => (myTurn ? html : '');
 
   if (p) {
     const iWait = p.waiting.includes(me);
     const who = list(p.waiting.map(nameFor));
     if (p.kind === 'window') {
       const what = `${nameFor(p.by)} played <strong>${esc(CARDS[p.as].name)}</strong>${typeOf(p.card) === 'cricket_song' ? ' (Cricket Song)' : ''}${targetWords(p)}.`;
-      if (!iWait) return `<p class="say">${what} Waiting for ${who} to respond…</p>`;
+      if (!iWait) return idle(`<p class="say">${what} Waiting for ${who} to respond…</p>`);
       return `<p class="say">${what} Cancel it?</p><div class="btns">${responseCards(S, me).map(c =>
         btn('respond', `Play ${esc(nameOf(c))}`, `data-card="${c}"`, 'primary')).join('')}${btn('respond', 'Let it happen')}</div>`;
     }
     if (p.kind === 'event') {
       const ev = `<strong>${esc(nameOf(p.card))}</strong>`;
       if (p.stage === 'flop') {
-        if (!iWait) return `<p class="say">${nameFor(p.by)} drew ${ev}. Waiting for ${who}…</p>`;
+        if (!iWait) return idle(`<p class="say">${nameFor(p.by)} drew ${ev}. Waiting for ${who}…</p>`);
         return `<p class="say">${nameFor(p.by)} drew ${ev}. Shuffle it back into the deck?</p><div class="btns">${responseCards(S, me).map(c =>
           btn('respond', `Play ${esc(nameOf(c))}${typeOf(c) === 'cricket_song' ? ' as Flop Boat' : ''}`, `data-card="${c}"`, 'primary')).join('')}${btn('respond', 'Let it happen')}</div>`;
       }
-      if (!iWait) return `<p class="say">${ev}! Waiting for ${who}…</p>`;
+      if (!iWait) return idle(`<p class="say">${ev}! Waiting for ${who}…</p>`);
       return `<p class="say">${ev}! Every hand is shuffled into the deck. Protect yours?</p><div class="btns">${responseCards(S, me).map(c =>
         btn('respond', `Play ${esc(nameOf(c))}${typeOf(c) === 'cricket_song' ? ' as Age-Old Cure' : ''}`, `data-card="${c}"`, 'primary')).join('')}${btn('respond', 'Lose my hand')}</div>`;
     }
     if (p.kind === 'merchant') {
-      if (!iWait) return `<p class="say"><strong>Traveling Merchant</strong>! Waiting for ${who} to choose a card to keep…</p>`;
+      if (!iWait) return idle(`<p class="say"><strong>Traveling Merchant</strong>! Waiting for ${who} to choose a card to keep…</p>`);
       return `<p class="say"><strong>Traveling Merchant</strong>! Click the one card in your hand you want to keep. The rest go to the player on your right.</p>`;
     }
     if (p.kind === 'rearrange') {
-      if (!iWait) return `<p class="say">${nameFor(p.by)} is rearranging the top of the deck…</p>`;
+      if (!iWait) return idle(`<p class="say">${nameFor(p.by)} is rearranging the top of the deck…</p>`);
       const left = p.cards.filter(c => !ui.order.includes(c));
       return `<p class="say">Scout: click the cards in the order they should be drawn (first click = top of the deck).</p>
         <div class="peek">${p.cards.map(c => cardHtml(c, ui.order.includes(c) ? 'used' : 'target', '')
@@ -170,7 +188,7 @@ function promptHtml() {
     }
   }
 
-  if (!myTurn) return `<p class="say">${nameFor(turnPid)} is taking their turn…</p>`;
+  if (!myTurn) return '';
 
   if (ui.discard) {
     const need = S.hands[me].length - HAND_LIMIT;
@@ -195,10 +213,10 @@ function promptHtml() {
 
   const must = mustDraw(S, me);
   const canDraw = !S.drew && !S.played && S.deck.length > 0;
-  const say = must ? 'Your turn. You skipped your draw last turn, so you must draw.'
-    : canDraw ? 'Your turn. Draw a card, or click a card in your hand to play it (you cannot draw after playing).'
-    : 'Your turn. Click a card in your hand to play it, or end your turn.';
-  return `<p class="say">${say}</p><div class="btns">${btn('draw', 'Draw a card', canDraw ? '' : 'disabled', canDraw ? 'primary' : '')}${btn('endTurn', 'End turn', must ? 'disabled' : '', canDraw ? '' : 'primary')}</div>`;
+  const say = must ? 'You skipped your draw last turn, so you must draw.'
+    : canDraw ? 'Draw, or play a card (no drawing after you play).'
+    : 'Play cards, or end your turn.';
+  return `<p class="say">${say}</p><div class="btns">${canDraw ? btn('draw', 'Draw', '', 'primary') : ''}${must ? '' : btn('endTurn', 'End turn', '', canDraw ? '' : 'primary')}</div>`;
 }
 
 function targetWords(p) {
@@ -217,9 +235,12 @@ function renderTable() {
   const opps = S.players.map((_, i) => S.players[(myIdx + 1 + i) % S.players.length]).filter(p => p.id !== me);
   const waiting = S.pending ? S.pending.waiting : [];
 
+  const badge = pid => (S.phase !== 'playing' ? ''
+    : waiting.includes(pid) ? `<span class="tag deciding">${pid === me ? 'your move' : 'deciding…'}</span>`
+    : pid === turnPid ? `<span class="tag turn">${pid === me ? 'your turn' : 'their turn'}</span>` : '');
   const seat = p => `
     <section class="seat ${p.id === turnPid ? 'active' : ''} ${waiting.includes(p.id) ? 'waiting' : ''}">
-      <header><h3>${esc(p.name)}</h3>
+      <header><h3>${esc(p.name)}</h3>${badge(p.id)}
         <span class="pill score" title="Free and Protected Gubs">${score(S, p.id)} Gub${score(S, p.id) === 1 ? '' : 's'}</span>
         <span class="pill" title="Cards in hand">${S.hands[p.id].length} in hand</span></header>
       <div class="stacks">${S.table[p.id].map(st => stackHtml(st, tg.cards, picked)).join('') || '<p class="empty">No cards in play</p>'}</div>
@@ -232,10 +253,11 @@ function renderTable() {
     if (ui.discard) return 'target ' + (ui.discard.includes(c) ? 'picked' : '');
     if (merchant) return 'target';
     if (ui.sel) return ui.sel.card === c ? 'selected' : 'dim';
-    if (myTurn && !mustDraw(S, me)) return getPlayOptions(S, me, c).length ? 'playable' : 'dim';
+    if (myTurn && !mustDraw(S, me)) return getPlayOptions(S, me, c).length ? 'playable' : '';
     return '';
   };
   const top = S.discard.at(-1);
+  const prompt = promptHtml();
   const letters = ['G', 'U', 'B'].map(l => {
     const got = S.letters.some(c => typeOf(c) === l);
     return `<span class="letter ${got ? 'got' : ''}">${l}</span>`;
@@ -256,12 +278,12 @@ function renderTable() {
         <div class="pile"><div class="card static"><img src="${img('back')}" alt="Deck"></div><span>Deck · ${S.deck.length}</span></div>
         <div class="pile">${top ? cardHtml(top, 'static') : '<div class="card static ghost"></div>'}<span>Discard · ${S.discard.length}</span></div>
       </div>
-      <div class="prompt panel" aria-live="polite">${promptHtml()}</div>
+      <div class="prompt-slot" aria-live="polite">${prompt ? `<div class="prompt panel">${prompt}</div>` : ''}</div>
       <ol class="log panel" aria-label="Game log">${S.log.slice(-40).map(l => `<li>${esc(l)}</li>`).join('')}</ol>
     </div>
 
     <section class="seat mine ${turnPid === me ? 'active' : ''} ${waiting.includes(me) ? 'waiting' : ''}">
-      <header><h3>${esc((S.players[myIdx] || {}).name)} <span class="tag you">you</span></h3>
+      <header><h3>${esc((S.players[myIdx] || {}).name)} <span class="tag you">you</span></h3>${badge(me)}
         <span class="pill score">${score(S, me)} Gub${score(S, me) === 1 ? '' : 's'}</span></header>
       <div class="stacks">${S.table[me].map(st => stackHtml(st, tg.cards, picked)).join('') || '<p class="empty">No cards in play</p>'}</div>
       <div class="hand" aria-label="Your hand">${hand.map(c => cardHtml(c, handCls(c))).join('') || '<p class="empty">Your hand is empty</p>'}</div>
