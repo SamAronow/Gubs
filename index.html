@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gubs</title>
+<link rel="icon" href="cards/gub.jpg">
+<link rel="stylesheet" href="css/theme.css">
+</head>
+<body class="home">
+<main class="home-card panel">
+  <h1 class="logo">Gubs</h1>
+  <p class="tagline">A game of wit and luck, for 2 to 6 players.</p>
+  <p id="mode-note" class="note" hidden>Practice mode: rooms only exist in this browser.</p>
+
+  <label for="name">Your name</label>
+  <input id="name" maxlength="16" autocomplete="off" placeholder="e.g. Sam">
+
+  <button id="create" class="btn primary">Create a room</button>
+
+  <div class="or">or join one</div>
+  <div class="join-row">
+    <input id="code" maxlength="4" autocomplete="off" placeholder="CODE" aria-label="Room code">
+    <button id="join" class="btn">Join</button>
+  </div>
+  <p id="error" class="error" role="alert"></p>
+</main>
+<script type="module" src="js/lobby.js"></script>
+</body>
+</html>
