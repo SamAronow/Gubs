@@ -5,6 +5,13 @@ import { newGame, applyAction, getPlayOptions, responseCards, stackStatus, score
 
 const TOTAL = Object.values(CARDS).reduce((n, c) => n + c.count, 0);
 assert.equal(TOTAL, 70, 'deck should be 70 cards');
+// Frequencies printed in the Card Guide.
+const GUIDE = { gub: 13, esteemed_elder: 1, mushroom: 7, toad_rider: 4, velvet_moth: 2, sud_spout: 4,
+  single_ring: 1, double_ring: 1, triple_ring: 1, lure: 7, super_lure: 2, cyclone: 1, lightning: 1,
+  omen_beetle: 1, smahl_thief: 1, spear: 4, haki_flute: 2, retreat: 1, scout: 1, feather: 2, blindfold: 1,
+  flop_boat: 1, age_old_cure: 2, cricket_song: 1, flash_flood: 1, gargok_plague: 1, dangerous_alchemy: 1,
+  rumor_of_wasps: 1, traveling_merchant: 1, G: 1, U: 1, B: 1 };
+assert.deepEqual(Object.fromEntries(Object.entries(CARDS).map(([k, v]) => [k, v.count])), GUIDE);
 
 function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
@@ -58,6 +65,9 @@ const pass = (s, pid) => ok(s, pid, { type: 'respond' });
   for (let n = 2; n <= 6; n++) {
     const s = newGame(P(n), rng(n));
     checkInvariants(s);
+    const tally = {};
+    for (const c of allCards(s)) tally[typeOf(c)] = (tally[typeOf(c)] || 0) + 1;
+    assert.deepEqual(tally, GUIDE, 'a new game holds exactly the Card Guide copies of every card');
     for (const p of s.players) {
       assert.equal(s.hands[p.id].length, 3);
       assert.ok(s.hands[p.id].every(c => !['event', 'letter'].includes(kindOf(c))), 'no Events dealt');
@@ -210,7 +220,8 @@ const pass = (s, pid) => ok(s, pid, { type: 'respond' });
   const [t1] = give(s, 'p0', 'smahl_thief');
   const st = putGub(s, 'p1', 'sud_spout');
   s = play(s, 'p0', t1, 'smahl_thief', 'steal', [st.gubs[0]]);
-  assert.equal(score(s, 'p0'), 2);
+  assert.equal(score(s, 'p0'), 1);
+  assert.ok(s.hands.p0.includes(st.gubs[0]), 'a stolen Gub goes to the thief\'s hand');
   assert.ok(s.discard.includes(st.top), 'Sud Spout is discarded when its Gub is stolen');
 }
 {
@@ -229,7 +240,7 @@ const pass = (s, pid) => ok(s, pid, { type: 'respond' });
 // ---- retreat, scout, age-old cure ----
 {
   let s = setup();
-  const [re, sc, sc2, cure] = give(s, 'p0', 'retreat', 'scout', 'scout', 'age_old_cure');
+  const [re, sc, sc2, cure] = give(s, 'p0', 'retreat', 'scout', 'cricket_song', 'age_old_cure');   // Cricket Song as a second Scout
   const sud = take(s, 'sud_spout'); s.table.p0[0].top = sud;
   const g = s.table.p0[0].gubs[0];
   s = play(s, 'p0', re, 'retreat', 'retreat', [g]);
@@ -332,6 +343,19 @@ const drawEvent = (s, pid, type) => { s.deck.push(take(s, type)); return ok(s, p
   assert.deepEqual(s.result.winners, ['p1'], 'Elder breaks the tie');
 }
 
+// ---- event counts, and resolved events leave the game for good ----
+{
+  const n = t => CARDS[t].count;
+  assert.deepEqual([n('flash_flood'), n('gargok_plague'), n('dangerous_alchemy'), n('rumor_of_wasps'), n('traveling_merchant')], [1, 1, 1, 1, 1]);
+  for (const ev of ['flash_flood', 'dangerous_alchemy', 'rumor_of_wasps', 'gargok_plague', 'traveling_merchant']) {
+    let s = setup();
+    s = drawEvent(s, 'p0', ev);
+    const id = s.discard.find(c => typeOf(c) === ev);
+    assert.ok(id, ev + ' goes to the discard pile once resolved');
+    assert.ok(!s.deck.includes(id) && !Object.values(s.hands).flat().includes(id));
+  }
+}
+
 // ---- random full games: every legal move keeps the state consistent ----
 function randomGame(seed, n) {
   const r = rng(seed);
@@ -339,8 +363,15 @@ function randomGame(seed, n) {
   let s = newGame(P(n), r);
   let steps = 0;
   const seen = new Set();
+  const drawn = {}, flopped = {}; let lastN = 0, flopCard = null;
   while (s.phase === 'playing') {
     assert.ok(++steps < 5000, 'game should finish');
+    if (s.lastDraw && s.lastDraw.n !== lastN) {
+      lastN = s.lastDraw.n;
+      if (s.lastDraw.open) drawn[s.lastDraw.card] = (drawn[s.lastDraw.card] || 0) + 1;
+    }
+    if (s.pending && s.pending.kind === 'event' && s.pending.stage === 'flop') flopCard = s.pending.card;
+    else { if (flopCard && s.deck.includes(flopCard)) flopped[flopCard] = (flopped[flopCard] || 0) + 1; flopCard = null; }
     if (s.reveal) s = ok(s, s.reveal.to, { type: 'dismissReveal' });
     if (s.pending) {
       const pid = s.pending.waiting[0], p = s.pending;
@@ -369,10 +400,12 @@ function randomGame(seed, n) {
   }
   assert.equal(s.letters.length, 3);
   assert.ok(s.result.winners.length >= 1);
+  // An Event can only come up again if a Flop Boat sent it back into the deck.
+  for (const [id, n] of Object.entries(drawn)) assert.ok(n <= 1 + (flopped[id] || 0), `${id} was drawn ${n} times`);
   return seen;
 }
 const covered = new Set();
-for (let seed = 1; seed <= 400; seed++) for (const k of randomGame(seed, 2 + seed % 5)) covered.add(k);
+for (let seed = 1; seed <= 3000; seed++) for (const k of randomGame(seed, 2 + seed % 5)) covered.add(k);
 console.log(`random games ok; ${covered.size} distinct plays exercised`);
 for (const k of ['lure/lure', 'super_lure/lure', 'smahl_thief/steal', 'retreat/retreat', 'triple_ring/trap', 'haki_flute/flute', 'scout/deck', 'age_old_cure/retrieve', 'spear/pop'])
   assert.ok(covered.has(k), 'random play never tried ' + k);

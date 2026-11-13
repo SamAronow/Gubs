@@ -216,7 +216,8 @@ function promptHtml() {
   const say = must ? 'You skipped your draw last turn, so you must draw.'
     : canDraw ? 'Draw, or play a card (no drawing after you play).'
     : 'Play cards, or end your turn.';
-  return `<p class="say">${say}</p><div class="btns">${canDraw ? btn('draw', 'Draw', '', 'primary') : ''}${must ? '' : btn('endTurn', 'End turn', '', canDraw ? '' : 'primary')}</div>`;
+  // End turn lives in the corner of the player's own area (see renderTable).
+  return `<p class="say">${say}</p>${canDraw ? `<div class="btns">${btn('draw', 'Draw', '', 'primary')}</div>` : ''}`;
 }
 
 function targetWords(p) {
@@ -227,6 +228,10 @@ function targetWords(p) {
 }
 
 function renderTable() {
+  // Remember where the log was scrolled to, so reading back through it isn't interrupted by updates.
+  const oldLog = app.querySelector('.log');
+  const pinned = !oldLog || oldLog.scrollHeight - oldLog.scrollTop - oldLog.clientHeight < 24;
+  const oldTop = oldLog ? oldLog.scrollTop : 0;
   const tg = currentTargets();
   const picked = ui.sel ? ui.sel.picked : [];
   const turnPid = S.players[S.turn].id;
@@ -279,19 +284,20 @@ function renderTable() {
         <div class="pile">${top ? cardHtml(top, 'static') : '<div class="card static ghost"></div>'}<span>Discard · ${S.discard.length}</span></div>
       </div>
       <div class="prompt-slot" aria-live="polite">${prompt ? `<div class="prompt panel">${prompt}</div>` : ''}</div>
-      <ol class="log panel" aria-label="Game log">${S.log.slice(-40).map(l => `<li>${esc(l)}</li>`).join('')}</ol>
+      <ol class="log panel" aria-label="Game log">${S.log.map(l => `<li>${esc(l)}</li>`).join('')}</ol>
     </div>
 
     <section class="seat mine ${turnPid === me ? 'active' : ''} ${waiting.includes(me) ? 'waiting' : ''}">
       <header><h3>${esc((S.players[myIdx] || {}).name)} <span class="tag you">you</span></h3>${badge(me)}
-        <span class="pill score">${score(S, me)} Gub${score(S, me) === 1 ? '' : 's'}</span></header>
+        <span class="pill score">${score(S, me)} Gub${score(S, me) === 1 ? '' : 's'}</span>
+        ${myTurn && !ui.discard && !mustDraw(S, me) ? '<button class="btn end-turn" data-act="endTurn">End turn</button>' : ''}</header>
       <div class="stacks">${S.table[me].map(st => stackHtml(st, tg.cards, picked)).join('') || '<p class="empty">No cards in play</p>'}</div>
       <div class="hand" aria-label="Your hand">${hand.map(c => cardHtml(c, handCls(c))).join('') || '<p class="empty">Your hand is empty</p>'}</div>
     </section>
   </div>
   ${overlayHtml()}`;
 
-  const lg = app.querySelector('.log'); if (lg) lg.scrollTop = lg.scrollHeight;
+  const lg = app.querySelector('.log'); if (lg) lg.scrollTop = pinned ? lg.scrollHeight : oldTop;
 }
 
 function overlayHtml() {

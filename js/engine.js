@@ -16,7 +16,8 @@ function shuffle(a, rng) {
 const clone = o => JSON.parse(JSON.stringify(o));
 const pname = (s, pid) => (s.players.find(p => p.id === pid) || {}).name || '?';
 const others = (s, pid) => s.players.map(p => p.id).filter(id => id !== pid);
-function log(s, msg) { s.log.push(msg); if (s.log.length > 80) s.log.shift(); }
+// The whole game's log is kept (a full game is only a few hundred short lines).
+function log(s, msg) { s.log.push(msg); }
 function fail(msg) { const e = new Error(msg); e.rule = true; throw e; }
 
 function newStack(s, gubs, top = null) { return { id: 's' + (s.seq++), gubs, top }; }
@@ -169,7 +170,7 @@ function optionsForType(s, pid, t) {
         if (owner !== pid && !isElder(st.gubs[0])) c.push(st.gubs[0]);
         if (st.top) c.push(st.top);
       }
-      add('steal', 'Steal a card in play', tCards(c)); break;
+      add('steal', 'Steal a card in play into your hand', tCards(c)); break;
     }
     case 'spear':
       add('pop', 'Destroy a Sud Spout', tCards(topsWhere(s, c => typeOf(c) === 'sud_spout')));
@@ -509,12 +510,12 @@ function resolve(s, e) {
       const l = loc(targets[0]);
       if (l.role === 'top') {                 // a Barricade or Sud Spout: into the thief's hand
         s.hands[by].push(freeTop(s, l.st));
-      } else {                                // a Gub: onto the thief's side, Free
-        if (l.st.top) {
+      } else {                                // a Gub: also into the thief's hand (Card Guide)
+        if (l.st.top) {                       // abandoned Barricade -> owner's hand; Sud Spout -> discard
           const top = freeTop(s, l.st);
           if (kindOf(top) === 'barricade') s.hands[l.pid].push(top); else s.discard.push(top);
         }
-        removeStack(s, l.pid, l.st); toSide(by, l.st.gubs);
+        removeStack(s, l.pid, l.st); s.hands[by].push(...l.st.gubs);
       }
       break;
     }

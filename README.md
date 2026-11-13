@@ -36,13 +36,14 @@ Framework Preset "Other", no build command, output directory left as the root. E
 
 ## Rulings made where the cards are silent
 
-- Card copies per deck are a best guess totalling 70 (see `js/cards.js`).
+- Card copies follow the frequencies printed in the Card Guide (70 cards).
 - Letters are seeded one per third of the deck.
 - Barricades go on your own Free Gubs only. The Esteemed Elder can never be covered, trapped, lured, speared or flooded.
 - Rings and Sud Spouts may trap any Free Gub in play, including your own.
 - Feather / Blindfold can be played by any player who holds one; only those players are asked.
-- Smahl Thief: a stolen Gub arrives Free on your side (its Barricade returns to the owner's hand,
-  its Sud Spout is discarded); a stolen Barricade or Sud Spout goes to your hand.
+- Smahl Thief (per the Card Guide): the stolen card goes to your hand, Gubs included. A Barricade left behind
+  returns to its owner's hand; a Sud Spout left behind is discarded.
+- Feather follows the card text (cancels Hazards and Traps); the Card Guide's summary only mentions Hazards.
 - Retreat takes whole stacks, including traps opponents put on your side.
 - Age-Old Cure's "take a Gub" mode is played on your own turn and cannot fetch the Elder.
 - Traveling Merchant: "right" is the player who acts before you.
