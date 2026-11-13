@@ -1,0 +1,1 @@
+{"type":"module","name":"gubs","private":true,"scripts":{"test":"node tests/engine.test.mjs"}}
